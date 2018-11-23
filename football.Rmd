@@ -1,0 +1,234 @@
+---
+title: "Inquiry Line 4"
+author: "James Klimavicz, EB Wlezien, Coskun Erden, Mauricio Serrano-Porras, and Valeria Velasquez-Zapata"
+date: "11/21/2018"
+output: pdf_document
+header-includes: \usepackage{bbm,amsmath,amsthm,amssymb,gensymb,mathrsfs}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(MASS)
+library(plyr)
+```
+
+
+## Line of Inquiry 
+
+Do the number of corner kicks and conceded free kicks associated with a higher number of goals scored per game? 
+
+Here, we consider the number of home team and away team committed fouls, the home and away corner kicks, and the number of home and away goals scored. 
+
+```{r, echo = F}
+# Div = League Division
+# Date = Match Date (dd/mm/yy)
+# HomeTeam = Home Team
+# AwayTeam = Away Team
+# FTHG= Full Time Home Team Goals
+# FTAG= Full Time Away Team Goals
+# HS = Home Team Shots
+# AS = Away Team Shots
+# HST = Home Team Shots on Target
+# AST = Away Team Shots on Target
+# HC = Home Team Corners
+# AC = Away Team Corners
+# HF = Home Team Fouls Committed
+# AF = Away Team Fouls Committed
+# HY = Home Team Yellow Cards
+# AY = Away Team Yellow Cards
+# HR = Home Team Red Cards
+# AR = Away Team Red Cards
+```
+
+### Data Loading and Tidying
+
+First, load the data, and perform some tidying.
+
+```{r}
+#read data 
+football = read.table("allseasons.csv", header = T, sep=",")
+#determine total goals (TG)
+football$TG=with(football,FTHG+FTAG)
+
+#gather based on the number of corner in free kicks, our variables of interest. 
+football_long_in <- football %>% gather(key = "param", value = "count", c("HF","AF","HC","AC"))
+football_long <- football_long_in[,c("FTHG","FTAG","TG","param","count")]
+football_long$param.name <- factor(football_long$param)
+levels(football_long$param.name) <- c("Away Team Corner Kicks",
+                                      "Away Team Free Kicks", 
+                                      "Home Team Corner Kicks", 
+                                      "Home Team Free Kicks")
+
+#gather based on types of scores
+football_long_scores <- football %>% gather(key = "goal_type", 
+                                            value = "score", c("FTHG", "FTAG", "TG"))
+football_long_scores$goal.name <- factor(football_long_scores$goal_type)
+levels(football_long_scores$goal.name) <- c("Away Goals", "Home Goals", "Total Goals")
+
+#gather based on all parameters of interest:
+param_list <- c("HF","AF","HC","AC","FTHG", "FTAG", "TG")
+football_all_long <- football %>% gather(key="param", value = "count", param_list)
+football_all_long <- football_all_long[,c("param","count")]
+football_all_long$param.name <- factor(football_all_long$param)
+levels(football_all_long$param.name) <- c("Away Team Corner Kicks",
+                                          "Away Team Free Kicks", 
+                                          "Away Goals",
+                                          "Home Goals", 
+                                          "Home Team Corner Kicks", 
+                                          "Home Team Free Kicks",
+                                          "Total Goals")
+```
+
+### Preliminary Dataset Analysis
+
+Now, analyze data, particularly data that will be used for the analysis of this project. First, we'll look at the parameters of the number of free kicks and corner kicks, as well as the number of home, away, and total goals.
+
+```{r}
+football_long %>% ggplot(aes(x = count, fill=param)) + 
+  geom_histogram(binwidth = 1) + 
+  facet_wrap(~param.name, scales="free") +
+  theme(legend.position="none") +
+  xlab("Number of Events in Game") + 
+  ylab("Count")
+``` 
+
+```{r}
+football_long_scores %>% ggplot(aes(x = score, fill=goal_type)) + 
+  geom_histogram(binwidth = 1) + 
+  facet_wrap(~goal.name, scales="free_y") +
+  theme(legend.position="none") +
+  xlab("Number of Goals in Game") + 
+  ylab("Count")
+```
+
+
+The data is slightly skewed, and superficially the number of free and corner kicks by the home and away team look like Poisson distributions. In fact, they look close enough to Poisson distributions to look at this further. 
+
+
+```{r}
+#Find lambda for a fitted Poisson curve, as well as other statistics, for each game stat.
+params <- football_all_long %>% group_by(param) %>%
+  dplyr::summarise(lambda = MASS::fitdistr(count, "Poisson")$estimate[1],
+                   max = max(count),
+                   count = n())
+
+#Find the predicted values of a Poisson curve with the estmated lambda for each game stat. 
+#inspired by https://stackoverflow.com/questions/1376967/
+grid <- with(football_all_long, seq.int(min(count), max(count), 1))
+pois_dens <- ddply(football_all_long, "param", function(df) {
+  data.frame( 
+    predicted = grid,
+    density = dpois(grid, MASS::fitdistr(df[,2], "Poisson")$estimate[1])*length(df[,2])
+  )
+})
+#modify the predicted data to fit with free-scale facet wrap when plotting
+pois_dens_mod <- left_join(pois_dens,params, by = "param") %>% filter(predicted <= max + 1)
+
+#plot the game stat with the Poisson predicted curves. 
+football_all_long %>% ggplot(aes(x = count)) + geom_histogram(binwidth = 1) +
+  geom_point(aes(x=predicted, y=density), data=pois_dens_mod, color="red") +
+  facet_wrap(~param, scale="free") +
+  xlab("Number of Events in Game") + 
+  ylab("Count")
+```
+
+It's not a great fit, but it's not terrible. 
+
+## Association of Kicks and Scoring
+
+We can now look at any potential association between free and corner kicks with scoring goals. 
+
+### Preliminary Dataset Analysis 
+
+First, let's look at a simple plot of the total goals scored in the game against the total number of free and corner kicks. 
+
+```{r}
+#use geom_jitter with 0.5 for height and width to show density of data better 
+football %>% ggplot(aes(y=TG, x=HF+AF+HC+AC)) + geom_jitter(width=0.5, height=0.5) +
+  ylab("Total Goals Scored in Game") + 
+  xlab("Total Corner and Free Kicks in Game")
+```
+
+This plot shows that there is very little association immediately present. If we squint, there is perhaps some very minor downward trend that is nearly obfuscated by the noise. Perhaps we'd have better luck looking at simple correlation, with the hope there are some linear trends. 
+
+```{r}
+cor(football[,c("FTHG","FTAG","TG")],football[,c("HF","AF","HC","AC")])
+```
+Unfortunately, our correlation matrix shows essentially no evidence of a simple linear trend between home, away, or total goals scored in a game with the number of home or away free or corner kicks. 
+
+### Linear Model Results
+
+We may expect that the number of goals scored in a game is a function of the number of free kicks and corner kicks, i.e. $$G = f(AF,HC,HF,AC) + \varepsilon, $$ where $G$ is the number of a specific type of goals in a game (i.e. total goals, away team goals, or home team goals),$AF$ is the number of away team fouls (penalty kicks awarded to the home team), $HC$ is the number of home team corner kicks, $HF$ is the number of home team fouls (penalty kicks awarded to the away team), $AC$ is the number of away team corner kicks, and $\varepsilon$ is an error term.
+
+As a last attempt, perhaps we can fit linear models to predict the number of home, away, and total goals scored, based on the number of corner and penalty kicks. Because a foul committed by one team results in a penalty kick for the other team, we might expect a synergistic effect between corner kicks on one team with penalty kicks on the other team. We therefore could develop the linear model $$G_i = \mu + AF_i + HC_i + (AF \cdot HC)_i + (HF)_i + (AC)_i + (HF \cdot AC)_i + \varepsilon_i,$$ where $\mu$ is a constant, $(AF \cdot HC)$ and $(HF \cdot AC)$ are interaction terms, and $\varepsilon \sim \mathcal N(0,\sigma)$ is assumed to be i.i.d. random error. 
+
+As a reminder, we would likely expect that the number of goals for a team would increase when that team is awarded penalty kicks and corner kicks, as these allow for formation of strategy. 
+
+#### Total Goals 
+
+We'll first look at the number of total goals in the game. 
+
+```{r}
+#Total goals
+fit_all = lm(TG ~ HC*AF + HF*AC, data=football)
+summary(fit_all)
+# par(mfrow=c(2,2))
+# plot(fit)
+```
+
+There appears to be a statistically significant effect from the number of penalty kicks awarded to the away team, but the effect is quite small, with an average reduction of 0.052 goals per game for each penalty kick awarded to the away team. 
+
+#### Away Team Goals
+
+```{r}
+#Away Team goals
+fit_away = lm(FTAG ~ HC*AF + HF*AC, data=football)
+summary(fit_away)
+```
+
+Here, we expected to see a positive correlation between $HF$ and $AC$ with the number of away team goals scored. However, these effects were not statistically significant, and instead, we find that $HC$ and $AF$ are statistically significant linear predictors, with decreases of 0.088 and 0.052 goals per game per event, respectively. There is also a statistically significant interaction between $HC$ and $AF$. 
+
+#### Home Team Goals
+```{r}
+#Home Team goals
+fit_home = lm(FTHG ~ HC*AF + HF*AC, data=football)
+summary(fit_home)
+```
+
+Most of the parameters are significant at the $\alpha = 0.05$ level in this model. $HC$ and $AF$ were associated with higher numbers of home team goals, while $HF$ and $AC$ were associated with lower numbers of home team goals. 
+
+### Linear Model Discussion 
+
+Perhaps the greatest surprise was the persistent trend of lower numbers of goals scored with greater numbers of free and penalty kicks, as opposed to increases in scores as expected. In soccer, the game timer is never stopped except at half time. Anytime play is stopped, the timer is continued, and at the end of each 45-minute half, up to 5 minutes of play is added to compensate for some of this lost play time; however, the amount of time lost to play stoppage is typically much greater than the time added back at the end of the half. This means than in increase in the number of corner kicks and free kicks, which were the result of restarting play after play stopped, produces a game with less actual playing time, and therefore less time to score goals.
+
+Unfortunately, these effects are quite small compared to the error term in the linear models. To firther explote this, we will consider the Home Team Goals, as this linear model had several statistically significant terms. The prediction margins are quite large, as expected. 
+
+```{r warning=FALSE}
+FTHG_predict <- predict(fit_home, interval="prediction")
+
+football_predict <- cbind(football, FTHG_predict)
+football_predict %>% 
+  ggplot(aes(y=FTHG, x=HF+AF+HC+AC)) + geom_jitter(width=0.5, height=0.5) +
+  ylab("Home Team Goals Scored in Game") + 
+  xlab("Total Corner and Free Kicks in Game") +
+  geom_smooth(method=lm, se=TRUE) +
+  geom_line(aes(y=lwr), color = "red", linetype = "dotted")+
+  geom_line(aes(y=upr), color = "red", linetype = "dotted")
+  
+football_predict$resid <- football_predict$FTHG - football_predict$fit
+football_predict %>% 
+  ggplot(aes(y=resid, x=HF+AF+HC+AC)) + geom_jitter(width=0.5, height=0.5) +
+  ylab("Home Team Goal Linear Model Residual") + 
+  xlab("Total Corner and Free Kicks in Game")
+
+abs_res_mean <- mean(abs(football_predict$resid))
+FTHG_mean <- mean(football_predict$FTHG)
+```
+
+The residuals are also quite substantial. Indeed, the mean absolute residual was `r round(abs_res_mean,2)` goals, which is nearly as large as the mean number of goals scored by the home team, which was `r round(FTHG_mean,2)` goals. As a result, we conclude that while more penalty kicks and corner kicks are associated with lower home team, away team, and total goals scored, likely due to less playing time from game stoppage, the number of these kicks has little predictive power in determining the number of these goals. 
+
+
+
+
+
