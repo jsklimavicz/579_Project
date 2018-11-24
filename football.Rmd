@@ -174,11 +174,15 @@ We'll first look at the number of total goals in the game.
 #Total goals
 fit_all = lm(TG ~ HC*AF + HF*AC, data=football)
 summary(fit_all)
-# par(mfrow=c(2,2))
-# plot(fit)
+
+#We see that interation is not significant, so try with no interaction.
+# fit_all = lm(TG ~ HC + AF + HF + AC, data=football)
+# summary(fit_all) #AC and HC are not significant
+fit_all = lm(TG ~ AF + HF, data=football)
+summary(fit_all)
 ```
 
-There appears to be a statistically significant effect from the number of penalty kicks awarded to the away team, but the effect is quite small, with an average reduction of 0.052 goals per game for each penalty kick awarded to the away team. 
+With this model with only the statistically significant componenents, we see that both home and away team fouls significantly reduce the number of total goals scored in these games, though the effect is rather small. 
 
 #### Away Team Goals
 
@@ -186,9 +190,28 @@ There appears to be a statistically significant effect from the number of penalt
 #Away Team goals
 fit_away = lm(FTAG ~ HC*AF + HF*AC, data=football)
 summary(fit_away)
+
+# We see that HF, AC, and HF:AC are not significant. We will try again without the HF*AC term.
+fit_away = lm(FTAG ~ HC*AF , data=football)
+summary(fit_away)
 ```
 
-Here, we expected to see a positive correlation between $HF$ and $AC$ with the number of away team goals scored. However, these effects were not statistically significant, and instead, we find that $HC$ and $AF$ are statistically significant linear predictors, with decreases of 0.088 and 0.052 goals per game per event, respectively. There is also a statistically significant interaction between $HC$ and $AF$. 
+Here, we expected to see a positive correlation between $HF$ and $AC$ with the number of away team goals scored. However, these effects were not statistically significant, and instead, we find that $HC$ and $AF$ are statistically significant linear predictors, with decreases of 0.089 and 0.052 goals per game per event, respectively. There is also a statistically significant interaction between $HC$ and $AF$:
+
+```{r}
+football$HC.f <- factor(football$HC)
+football$AF.f <- factor(football$AF)
+football %>% group_by(HC.f,AF.f) %>% dplyr::summarise(Away_goals = mean(FTAG),
+                                                      game_count = n()) %>%
+  filter(game_count >=5) %>% #to remove counts with few data points
+  ggplot(aes(x=HC.f,y=AF.f, colour = Away_goals, size=game_count)) + 
+  geom_point() +
+  scale_colour_gradientn(colours=rainbow(10)) + 
+  ylab("Home Team Free Kicks") + 
+  xlab("Home Team Corner Kicks")
+```
+
+Looking at this graph, we see that, in general terms, the away team scores more goals when the home team has low numbers of corner kicks and free kick, while more home team corner and free kicks typically work together to produce fewer goals for the away team. 
 
 #### Home Team Goals
 ```{r}
@@ -196,7 +219,13 @@ Here, we expected to see a positive correlation between $HF$ and $AC$ with the n
 fit_home = lm(FTHG ~ HC*AF + HF*AC, data=football)
 summary(fit_home)
 ```
-Most of the parameters are significant at the $\alpha = 0.05$ level in this model. $HC$ and $AF$ were associated with higher numbers of home team goals, while $HF$ and $AC$ were associated with lower numbers of home team goals.
+
+Most of the parameters are significant at the $\alpha = 0.05$ level in this model. $HC$ and $AF$ were associated with higher numbers of home team goals, while $HF$ and $AC$ were associated with lower numbers of home team goals. We try a modified model to better fit the data. 
+
+```{r}
+fit_home = lm(FTHG ~ HC*AF + HF + AC, data=football)
+summary(fit_home)
+```
 
 We can look at how the indivaidual parameters are related to the number of home team goals scored. 
 
@@ -209,10 +238,8 @@ football_long %>%
   facet_wrap(~param.name, scales = "free_x")
 ```
 
-We can also look at the HC:AF interaction term. 
+We can also look at the HC:AF interaction term, which we also observed in the Away Team goals. 
 ```{r} 
-football$HC.f <- factor(football$HC)
-football$AF.f <- factor(football$AF)
 football %>% group_by(HC.f,AF.f) %>% dplyr::summarise(mean_goals = mean(FTHG),
                                                       game_count = n()) %>%
   filter(game_count >=5) %>% #to remove counts with few data points
@@ -223,7 +250,7 @@ football %>% group_by(HC.f,AF.f) %>% dplyr::summarise(mean_goals = mean(FTHG),
   xlab("Home Team Corner Kicks")
 ```
 
-It's not obvious what the interaction is, other than the fact that there are differences of the mean number of goals between different combinations of the number of corner kicks and free kicks given to the home team.
+It's not obvious what the interaction is, other than the fact that there are differences of the mean number of goals between different combinations of the number of corner kicks and free kicks given to the home team, thought perhaps a higher corner kick to free kick ratio for the home team often is associated with more goals for the home team. 
 
 ### Linear Model Discussion 
 
