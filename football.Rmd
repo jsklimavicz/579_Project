@@ -56,9 +56,9 @@ football_long_in <- football %>% gather(key = "param", value = "count", c("HF","
 football_long <- football_long_in[,c("FTHG","FTAG","TG","param","count")]
 football_long$param.name <- factor(football_long$param)
 levels(football_long$param.name) <- c("Away Team Corner Kicks",
-                                      "Away Team Free Kicks", 
+                                      "Home Team Free Kicks", 
                                       "Home Team Corner Kicks", 
-                                      "Home Team Free Kicks")
+                                      "Away Team Free Kicks")
 
 #gather based on types of scores
 football_long_scores <- football %>% gather(key = "goal_type", 
@@ -71,12 +71,13 @@ param_list <- c("HF","AF","HC","AC","FTHG", "FTAG", "TG")
 football_all_long <- football %>% gather(key="param", value = "count", param_list)
 football_all_long <- football_all_long[,c("param","count")]
 football_all_long$param.name <- factor(football_all_long$param)
+#note that AF (away fouls) becomes Home Team Free Kicks, and HF becomes Away Team Free Kicks 
 levels(football_all_long$param.name) <- c("Away Team Corner Kicks",
-                                          "Away Team Free Kicks", 
-                                          "Away Goals",
-                                          "Home Goals", 
+                                          "Home Team Free Kicks", 
+                                          "Away Team Goals",
+                                          "Home Team Goals", 
                                           "Home Team Corner Kicks", 
-                                          "Home Team Free Kicks",
+                                          "Away Team Free Kicks",
                                           "Total Goals")
 ```
 
@@ -195,8 +196,34 @@ Here, we expected to see a positive correlation between $HF$ and $AC$ with the n
 fit_home = lm(FTHG ~ HC*AF + HF*AC, data=football)
 summary(fit_home)
 ```
+Most of the parameters are significant at the $\alpha = 0.05$ level in this model. $HC$ and $AF$ were associated with higher numbers of home team goals, while $HF$ and $AC$ were associated with lower numbers of home team goals.
 
-Most of the parameters are significant at the $\alpha = 0.05$ level in this model. $HC$ and $AF$ were associated with higher numbers of home team goals, while $HF$ and $AC$ were associated with lower numbers of home team goals. 
+We can look at how the indivaidual parameters are related to the number of home team goals scored. 
+
+```{r}
+football_long %>% 
+  ggplot(aes(y=FTHG, x=count)) + geom_jitter(width=0.5, height=0.5) +
+  ylab("Home Team Goals Scored in Game") + 
+  xlab("Total Corner and Free Kicks in Game") +
+  geom_smooth(method=lm, se=TRUE) + 
+  facet_wrap(~param.name, scales = "free_x")
+```
+
+We can also look at the HC:AF interaction term. 
+```{r} 
+football$HC.f <- factor(football$HC)
+football$AF.f <- factor(football$AF)
+football %>% group_by(HC.f,AF.f) %>% dplyr::summarise(mean_goals = mean(FTHG),
+                                                      game_count = n()) %>%
+  filter(game_count >=5) %>% #to remove counts with few data points
+  ggplot(aes(x=HC.f,y=AF.f, colour = mean_goals, size=game_count)) + 
+  geom_point() +
+  scale_colour_gradientn(colours=rainbow(10)) + 
+  ylab("Home Team Free Kicks") + 
+  xlab("Home Team Corner Kicks")
+```
+
+It's not obvious what the interaction is, other than the fact that there are differences of the mean number of goals between different combinations of the number of corner kicks and free kicks given to the home team.
 
 ### Linear Model Discussion 
 
@@ -226,7 +253,7 @@ abs_res_mean <- mean(abs(football_predict$resid))
 FTHG_mean <- mean(football_predict$FTHG)
 ```
 
-The residuals are also quite substantial. Indeed, the mean absolute residual was `r round(abs_res_mean,2)` goals, which is nearly as large as the mean number of goals scored by the home team, which was `r round(FTHG_mean,2)` goals. As a result, we conclude that while more penalty kicks and corner kicks are associated with lower home team, away team, and total goals scored, likely due to less playing time from game stoppage, the number of these kicks has little predictive power in determining the number of these goals. 
+The residuals are also quite substantial. Indeed, the mean absolute residual was `r round(abs_res_mean,2)` goals, which is nearly as large as the mean number of goals scored by the home team, which was `r round(FTHG_mean,2)` goals. As a result, we conclude that while more free kicks and corner kicks are associated with lower home team, away team, and total goals scored, possibly due to less playing time from game stoppage, the number of these kicks has little predictive power in determining the number of these goals. Alternatively, more fouls may be committed in low-scoring games due to frustration over inability to score. Without temporally resolved data, it is unfortunately not possible to determine these types of causal relationships.
 
 
 
