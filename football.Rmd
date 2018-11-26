@@ -2,7 +2,7 @@
 title: "Inquiry Line 4"
 author: "James Klimavicz, EB Wlezien, Coskun Erden, Mauricio Serrano-Porras, and Valeria Velasquez-Zapata"
 date: "11/21/2018"
-output: pdf_document
+output: html_document
 header-includes: \usepackage{bbm,amsmath,amsthm,amssymb,gensymb,mathrsfs}
 ---
 
@@ -196,7 +196,7 @@ fit_away = lm(FTAG ~ HC*AF , data=football)
 summary(fit_away)
 ```
 
-Here, we expected to see a positive correlation between $HF$ and $AC$ with the number of away team goals scored. However, these effects were not statistically significant, and instead, we find that $HC$ and $AF$ are statistically significant linear predictors, with decreases of 0.089 and 0.052 goals per game per event, respectively. There is also a statistically significant interaction between $HC$ and $AF$:
+Here, we expected to see a positive correlation between $HF$ and $AC$ with the number of away team goals scored. However, these effects were not statistically significant, and instead, we find that $HC$ and $AF$ are statistically significant linear predictors, with decreases of 0.096 and 0.057 goals per game per event, respectively. There is also a statistically significant interaction between $HC$ and $AF$:
 
 ```{r}
 football$HC.f <- factor(football$HC)
